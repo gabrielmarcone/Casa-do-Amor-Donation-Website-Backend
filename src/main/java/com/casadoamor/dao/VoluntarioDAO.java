@@ -27,12 +27,13 @@ public class VoluntarioDAO implements IVoluntarioDAO{
     
     try(Connection connection = ConnectionFactory.getConnection();
         PreparedStatement pstm = connection.prepareStatement(sql)) {
-      pstm.setString(1, voluntario.getNome());
-      pstm.setString(2, voluntario.getEmail());
-      pstm.setString(3, voluntario.getCpf());
-      pstm.setString(4, voluntario.getTelefone());
-      pstm.setDate(5, Date.valueOf(voluntario.getDataInscricao()));
-      pstm.setString(6, voluntario.getStatusInscricao().toString());
+      pstm.setString(1,voluntario.getIdUsuario());
+      pstm.setString(2, voluntario.getNome());
+      pstm.setString(3, voluntario.getEmail());
+      pstm.setString(4, voluntario.getCpf());
+      pstm.setString(5, voluntario.getTelefone());
+      pstm.setDate(6, Date.valueOf(voluntario.getDataInscricao()));
+      pstm.setString(7, voluntario.getStatusInscricao().toString());
 
       pstm.execute();
     }catch (Exception e){
