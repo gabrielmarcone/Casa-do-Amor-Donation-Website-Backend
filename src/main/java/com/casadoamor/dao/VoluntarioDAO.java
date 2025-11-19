@@ -2,6 +2,7 @@ package com.casadoamor.dao;
 
 import java.sql.Connection;
 import com.casadoamor.model.Voluntario;
+import com.casadoamor.model.VoluntarioAreaAtuacao;
 import com.casadoamor.util.ConnectionFactory;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -23,26 +24,47 @@ public class VoluntarioDAO implements IVoluntarioDAO{
 
   @Override
   public void salvar(Voluntario voluntario) {
-    String sql = "INSERT INTO Voluntario (idUsuario, nome, email, cpf, telefone, dataInscricao, statusInscricao) VALUES(?, ?, ?, ?, ?, ?, ?)";
+    //IdUsuario eh chave primaria, nao entra no insert (autoincrementada pelo bd), verificar caso seja necessaria a insercao
+    String sqlVoluntario = "INSERT INTO Voluntario (nome, email, cpf, telefone, dataInscricao, statusInscricao) VALUES(?, ?, ?, ?, ?, ?)";
+    String sqlRelacao = "INSERT INTO voluntario_area_atuacao (id_voluntario, id_area_atuacao, especialidade) VALUES (?, ?, ?)";
     
-    try(Connection connection = ConnectionFactory.getConnection();
-        PreparedStatement pstm = connection.prepareStatement(sql)) {
-      pstm.setString(1,voluntario.getIdUsuario());
-      pstm.setString(2, voluntario.getNome());
-      pstm.setString(3, voluntario.getEmail());
-      pstm.setString(4, voluntario.getCpf());
-      pstm.setString(5, voluntario.getTelefone());
-      pstm.setDate(6, Date.valueOf(voluntario.getDataInscricao()));
-      pstm.setString(7, voluntario.getStatusInscricao().toString());
+    try(Connection connection = ConnectionFactory.getConnection()) {
+      connection.setAutoCommit(false);
+      Long idVoluntarioGerado = null;
 
+      // salva o voluntario e pega o id
+      try(PreparedStatement pstm = connection.prepareStatement(sqlVoluntario)){
+      pstm.setString(1, voluntario.getNome());
+      pstm.setString(2, voluntario.getEmail());
+      pstm.setString(3, voluntario.getCpf());
+      pstm.setString(4, voluntario.getTelefone());
+      pstm.setDate(5, Date.valueOf(voluntario.getDataInscricao()));
+      pstm.setString(6, voluntario.getStatusInscricao().toString());
       pstm.execute();
-    }catch (Exception e){
-      e.printStackTrace();
+      ResultSet rs = pstm.executeQuery();
+      if(rs.next()){
+        idVoluntarioGerado = rs.getLong(1);
+      }
+    }
 
-      throw new RuntimeException("Erro ao salvar voluntario", e);
+    // Salva a area de atuacao e especialidade
+    if (voluntario.getAreasDeAtuacao() != null && !voluntario.getAreasDeAtuacao().isEmpty()) {
+      try (PreparedStatement pstmRel = connection.prepareStatement(sqlRelacao)) {
+        for (VoluntarioAreaAtuacao relacao : voluntario.getAreasDeAtuacao()) {
+          pstmRel.setLong(1, idVoluntarioGerado);
+          pstmRel.setLong(2, relacao.getAreaAtuacao().getIdArea()); // O ID vindo do dropdown
+          pstmRel.setString(3, relacao.getEspecialidade()); // O texto vindo do input "Especialidade"
+          pstmRel.addBatch();
+        }
+        pstmRel.executeBatch();
+      }
+    }
+
+    connection.commit();
+    } catch (Exception e){
+      throw new RuntimeException("Erro ao salvar voluntário completo", e);
     }
   }
-
   @Override
   public List<Voluntario> listar() { 
     /* So funciona se a tabela 'Voluntario' tambem tiver as colunas nome, email, etc.

@@ -2,16 +2,20 @@ package com.casadoamor.service;
 
 import java.time.LocalDate;
 import com.casadoamor.enums.StatusInscricao;
+import com.casadoamor.model.AreaAtuacao;
 import com.casadoamor.model.Voluntario;
 import com.casadoamor.dao.VoluntarioDAO;
 import java.util.List;
+import com.casadoamor.dao.AreaAtuacaoDAO;
 
 public class VoluntarioService {
 
   private VoluntarioDAO voluntarioDAO;
+  private AreaAtuacaoDAO areaAtuacaoDAO;
 
   public VoluntarioService(){
     this.voluntarioDAO = new VoluntarioDAO();
+    this.areaAtuacaoDAO = new AreaAtuacaoDAO();
   }
 
   public void registrarInscricao(Voluntario voluntario) throws Exception{
@@ -53,5 +57,9 @@ public class VoluntarioService {
 
     //BUSCAR DADOS 
     return voluntarioDAO.listar();
+  }
+
+  public List<AreaAtuacao> buscarAreasParaDropdown(){
+    return areaAtuacaoDAO.listar();
   }
 }
