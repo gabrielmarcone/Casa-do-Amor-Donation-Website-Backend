@@ -12,9 +12,13 @@ public class CriarDoacaoRequest {
   private String nomeDoador;
   private String emailDoador;
 
-  // Para cartão
-  private String cardToken; // token gerado no front pelo gateway
+  // Para cartao
+  private String tokenCartao; // token gerado no front pelo gateway
   private Integer parcelas;
+  private String metodoPagamentoId; // ex: visa, master, elo
+  private String tipoPagamento; // credit_card ou debit_card
+  private String documentoTipo; // ex: CPF
+  private String documentoNumero; // ex: 12345678909
 
   public CriarDoacaoRequest() {
   }
@@ -59,12 +63,12 @@ public class CriarDoacaoRequest {
     this.emailDoador = emailDoador;
   }
 
-  public String getCardToken() {
-    return cardToken;
+  public String getTokenCartao() {
+    return tokenCartao;
   }
 
-  public void setCardToken(String cardToken) {
-    this.cardToken = cardToken;
+  public void setTokenCartao(String tokenCartao) {
+    this.tokenCartao = tokenCartao;
   }
 
   public Integer getParcelas() {
@@ -73,6 +77,38 @@ public class CriarDoacaoRequest {
 
   public void setParcelas(Integer parcelas) {
     this.parcelas = parcelas;
+  }
+
+  public String getMetodoPagamentoId() {
+    return metodoPagamentoId;
+  }
+
+  public void setMetodoPagamentoId(String metodoPagamentoId) {
+    this.metodoPagamentoId = metodoPagamentoId;
+  }
+
+  public String getTipoPagamento() {
+    return tipoPagamento;
+  }
+
+  public void setTipoPagamento(String tipoPagamento) {
+    this.tipoPagamento = tipoPagamento;
+  }
+
+  public String getDocumentoTipo() {
+    return documentoTipo;
+  }
+
+  public void setDocumentoTipo(String documentoTipo) {
+    this.documentoTipo = documentoTipo;
+  }
+
+  public String getDocumentoNumero() {
+    return documentoNumero;
+  }
+
+  public void setDocumentoNumero(String documentoNumero) {
+    this.documentoNumero = documentoNumero;
   }
 
 }

@@ -1,21 +1,22 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" 
+<project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    
+
     <modelVersion>4.0.0</modelVersion>
-    
+
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>3.2.3</version>
-        <relativePath/> </parent>
-    
+        <relativePath/>
+    </parent>
+
     <groupId>com.casadoamor</groupId>
     <artifactId>casa-do-amor-backend</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>casa-do-amor-backend</name>
-    <description>Backend para o sistema de doações Casa do Amor</description>
-    
+    <description>Backend para o sistema de doacoes Casa do Amor</description>
+
     <properties>
         <java.version>17</java.version>
     </properties>
@@ -37,7 +38,7 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-devtools</artifactId>
@@ -53,15 +54,8 @@
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>   
+            <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
-
-        <dependency>
-            <groupId>org.json</groupId>
-            <artifactId>json</artifactId>
-            <version>20220320</version>
-        </dependency>
-
 
     </dependencies>
 
@@ -70,6 +64,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.casadoamor.CasaDoAmorApplication</mainClass>
+                </configuration>
             </plugin>
         </plugins>
     </build>
