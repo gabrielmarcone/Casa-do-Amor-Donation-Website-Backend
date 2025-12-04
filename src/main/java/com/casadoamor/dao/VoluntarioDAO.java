@@ -1,105 +1,120 @@
 package com.casadoamor.dao;
 
-import java.sql.Connection;
+import com.casadoamor.enums.StatusInscricao;
 import com.casadoamor.model.Voluntario;
 import com.casadoamor.model.VoluntarioAreaAtuacao;
 import com.casadoamor.util.ConnectionFactory;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
-import com.casadoamor.enums.StatusInscricao;
-import java.sql.Date;
+public class VoluntarioDAO implements IVoluntarioDAO {
 
+    @Override
+    public void salvar(Voluntario voluntario) {
+        // 1. Inserir na tabela Pai (Usuario)
+        String sqlUsuario = "INSERT INTO usuario (nome, email, cpf, telefone) VALUES (?, ?, ?, ?)";
+        // 2. Inserir na tabela Filha (Voluntario)
+        String sqlVoluntario = "INSERT INTO voluntario (id_usuario, data_inscricao, status_inscricao) VALUES (?, ?, ?)";
+        // 3. Inserir Áreas
+        String sqlRelacao = "INSERT INTO voluntario_area_atuacao (id_usuario, id_area_atuacao, especialidade) VALUES (?, ?, ?)";
 
-public class VoluntarioDAO implements IVoluntarioDAO{
+        try (Connection conn = ConnectionFactory.getConnection()) {
+            conn.setAutoCommit(false); // Inicia Transação
 
-  public VoluntarioDAO(){
+            try {
+                // Passo 1: Salvar Usuario e pegar ID
+                Long idUsuarioGerado = null;
+                try (PreparedStatement psUser = conn.prepareStatement(sqlUsuario, Statement.RETURN_GENERATED_KEYS)) {
+                    psUser.setString(1, voluntario.getNome());
+                    psUser.setString(2, voluntario.getEmail());
+                    psUser.setString(3, voluntario.getCpf());
+                    psUser.setString(4, voluntario.getTelefone());
+                    psUser.executeUpdate();
 
-  }
+                    try (ResultSet rs = psUser.getGeneratedKeys()) {
+                        if (rs.next()) {
+                            idUsuarioGerado = rs.getLong(1);
+                            voluntario.setIdUsuario(idUsuarioGerado);
+                        } else {
+                            throw new SQLException("Falha ao obter ID do usuário.");
+                        }
+                    }
+                }
 
-  @Override
-  public void salvar(Voluntario voluntario) {
-    //IdUsuario eh chave primaria, nao entra no insert (autoincrementada pelo bd), verificar caso seja necessaria a insercao
-    String sqlVoluntario = "INSERT INTO Voluntario (nome, email, cpf, telefone, dataInscricao, statusInscricao) VALUES(?, ?, ?, ?, ?, ?)";
-    String sqlRelacao = "INSERT INTO voluntario_area_atuacao (id_voluntario, id_area_atuacao, especialidade) VALUES (?, ?, ?)";
-    
-    try(Connection connection = ConnectionFactory.getConnection()) {
-      connection.setAutoCommit(false);
-      Long idVoluntarioGerado = null;
+                // Passo 2: Salvar Voluntario usando o mesmo ID
+                try (PreparedStatement psVol = conn.prepareStatement(sqlVoluntario)) {
+                    psVol.setLong(1, idUsuarioGerado);
+                    psVol.setDate(2, Date.valueOf(voluntario.getDataInscricao()));
+                    psVol.setString(3, voluntario.getStatusInscricao().name());
+                    psVol.executeUpdate();
+                }
 
-      // salva o voluntario e pega o id
-      try(PreparedStatement pstm = connection.prepareStatement(sqlVoluntario)){
-      pstm.setString(1, voluntario.getNome());
-      pstm.setString(2, voluntario.getEmail());
-      pstm.setString(3, voluntario.getCpf());
-      pstm.setString(4, voluntario.getTelefone());
-      pstm.setDate(5, Date.valueOf(voluntario.getDataInscricao()));
-      pstm.setString(6, voluntario.getStatusInscricao().toString());
-      pstm.execute();
-      ResultSet rs = pstm.executeQuery();
-      if(rs.next()){
-        idVoluntarioGerado = rs.getLong(1);
-      }
-    }
+                // Passo 3: Salvar Áreas de Atuação
+                if (voluntario.getAreasDeAtuacao() != null && !voluntario.getAreasDeAtuacao().isEmpty()) {
+                    try (PreparedStatement psRel = conn.prepareStatement(sqlRelacao)) {
+                        for (VoluntarioAreaAtuacao rel : voluntario.getAreasDeAtuacao()) {
+                            psRel.setLong(1, idUsuarioGerado); // Usa o ID do Usuario/Voluntario
+                            psRel.setLong(2, rel.getAreaAtuacao().getIdArea());
+                            psRel.setString(3, rel.getEspecialidade());
+                            psRel.addBatch();
+                        }
+                        psRel.executeBatch();
+                    }
+                }
 
-    // Salva a area de atuacao e especialidade
-    if (voluntario.getAreasDeAtuacao() != null && !voluntario.getAreasDeAtuacao().isEmpty()) {
-      try (PreparedStatement pstmRel = connection.prepareStatement(sqlRelacao)) {
-        for (VoluntarioAreaAtuacao relacao : voluntario.getAreasDeAtuacao()) {
-          pstmRel.setLong(1, idVoluntarioGerado);
-          pstmRel.setLong(2, relacao.getAreaAtuacao().getIdArea()); // O ID vindo do dropdown
-          pstmRel.setString(3, relacao.getEspecialidade()); // O texto vindo do input "Especialidade"
-          pstmRel.addBatch();
+                conn.commit(); // Confirma tudo
+
+            } catch (SQLException e) {
+                conn.rollback(); // Desfaz se der erro
+                throw e;
+            }
+
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao salvar voluntário completo", e);
         }
-        pstmRel.executeBatch();
-      }
     }
 
-    connection.commit();
-    } catch (Exception e){
-      throw new RuntimeException("Erro ao salvar voluntário completo", e);
-    }
-  }
-  @Override
-  public List<Voluntario> listar() { 
-    /* So funciona se a tabela 'Voluntario' tambem tiver as colunas nome, email, etc.
-     * se as tabelas usuario e voluntario forem separadas (como no MER), o SQL correto sera um JOIN
-     * String sql = "SELECT * FROM Voluntario v JOIN Usuario u ON v.id_usuario = u.id_usuario";
-      */
-    String sql = "SELECT * FROM Voluntario";
-    List<Voluntario> retorno = new ArrayList<>();
-    try(Connection connection = ConnectionFactory.getConnection();
-        PreparedStatement pstm = connection.prepareStatement(sql);
-        ResultSet resultado = pstm.executeQuery()) {
-      
-      while(resultado.next()){
-        Voluntario voluntario = new Voluntario();
-        voluntario.setIdUsuario(resultado.getLong("idUsuario"));
-        voluntario.setNome(resultado.getString("nome"));
-        voluntario.setEmail(resultado.getString("email"));
-        voluntario.setCpf(resultado.getString("cpf"));
-        voluntario.setTelefone(resultado.getString("telefone"));
-        Date dataDoBanco = resultado.getDate("dataInscricao");
-        // Conversao de tipos necessarias abaixo
-        if(dataDoBanco != null){
-          voluntario.setDataInscricao(dataDoBanco.toLocalDate()); 
-        }
-        String statusDoBanco = resultado.getString("statusInscricao");
-        if(statusDoBanco != null){
-          voluntario.setStatusInscricao(StatusInscricao.valueOf(statusDoBanco));
-        }
-        retorno.add(voluntario);
-      }
-    } catch (SQLException ex){
-      Logger.getLogger(VoluntarioDAO.class.getName()).log(Level.SEVERE, null, ex);
-      throw new RuntimeException("Erro ao listar voluntarios", ex);
-    }
-    return retorno;
-  }
+    @Override
+    public List<Voluntario> listar() {
+        // JOIN Obrigatório pois os dados estão espalhados
+        String sql = "SELECT u.id_usuario, u.nome, u.email, u.cpf, u.telefone, v.data_inscricao, v.status_inscricao " +
+                    "FROM voluntario v " +
+                    "JOIN usuario u ON v.id_usuario = u.id_usuario";
+        
+        List<Voluntario> lista = new ArrayList<>();
+        try (Connection conn = ConnectionFactory.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
 
+            while (rs.next()) {
+                Voluntario v = new Voluntario();
+                v.setIdUsuario(rs.getLong("id_usuario"));
+                v.setNome(rs.getString("nome"));
+                v.setEmail(rs.getString("email"));
+                v.setCpf(rs.getString("cpf"));
+                v.setTelefone(rs.getString("telefone"));
+                v.setDataInscricao(rs.getDate("data_inscricao").toLocalDate());
+                v.setStatusInscricao(StatusInscricao.valueOf(rs.getString("status_inscricao")));
+                lista.add(v);
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao listar voluntários", e);
+        }
+        return lista;
+    }
+
+    // Novo Método Solicitado: Atualizar Status
+    public void atualizarStatus(Long idUsuario, StatusInscricao novoStatus) {
+        String sql = "UPDATE voluntario SET status_inscricao = ? WHERE id_usuario = ?";
+        try (Connection conn = ConnectionFactory.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, novoStatus.name());
+            ps.setLong(2, idUsuario);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao atualizar status do voluntário", e);
+        }
+    }
 }
