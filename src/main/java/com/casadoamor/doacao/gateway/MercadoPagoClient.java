@@ -6,8 +6,8 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import com.casadoamor.doacao.config.MercadoPagoConfigManager;
-import com.casadoamor.doacao.dto.CriarDoacaoRequest;
-import com.casadoamor.doacao.model.Doacao;
+import com.casadoamor.dto.CriarDoacaoRequest;
+import com.casadoamor.model.Doacao;
 
 public class MercadoPagoClient {
 
@@ -27,7 +27,7 @@ public class MercadoPagoClient {
             // Tenta pegar direto do ambiente caso a classe de config tenha falhado
             accessToken = System.getenv("ACCESS_TOKEN");
             if (accessToken == null || accessToken.isBlank()) {
-                 throw new IllegalStateException("Access token do Mercado Pago nao configurado");
+                throw new IllegalStateException("Access token do Mercado Pago nao configurado");
             }
         }
         MercadoPagoConfigManager.configuracoes(prop);

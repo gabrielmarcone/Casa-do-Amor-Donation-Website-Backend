@@ -1,4 +1,4 @@
-package com.casadoamor.doacao.controller;
+package com.casadoamor.controller;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
