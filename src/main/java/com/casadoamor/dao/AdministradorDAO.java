@@ -15,14 +15,14 @@ public class AdministradorDAO {
         // Faz o JOIN para pegar dados do Usuário (nome, email) e do Admin (senha)
         // Ajuste os nomes das tabelas/colunas conforme seu banco exato
         String sql = "SELECT u.id_usuario, u.nome, u.email, a.senha " +
-                     "FROM Usuario u " +
-                     "JOIN Administrador a ON u.id_usuario = a.id_usuario " +
-                     "WHERE u.email = ?";
+                    "FROM Usuario u " +
+                    "JOIN Administrador a ON u.id_usuario = a.id_usuario " +
+                    "WHERE u.email = ?";
 
         Administrador admin = null;
 
         try (Connection conn = ConnectionFactory.getConnection();
-             PreparedStatement pstm = conn.prepareStatement(sql)) {
+            PreparedStatement pstm = conn.prepareStatement(sql)) {
             
             pstm.setString(1, email);
             

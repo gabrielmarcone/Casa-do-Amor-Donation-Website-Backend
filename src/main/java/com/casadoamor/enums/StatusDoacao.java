@@ -1,4 +1,4 @@
-package com.casadoamor.doacao.enums;
+package com.casadoamor.enums;
 
 public enum StatusDoacao {
   PENDING, 

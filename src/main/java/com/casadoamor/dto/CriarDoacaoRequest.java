@@ -1,4 +1,4 @@
-package com.casadoamor.doacao.dto;
+package com.casadoamor.dto;
 
 import java.math.BigDecimal;
 

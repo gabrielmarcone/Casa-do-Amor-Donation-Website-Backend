@@ -1,9 +1,10 @@
-package com.casadoamor.doacao.model;
+package com.casadoamor.model;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-import com.casadoamor.doacao.enums.StatusDoacao;
+
+import com.casadoamor.enums.StatusDoacao;
 
 public class Doacao {
   private Long id;
