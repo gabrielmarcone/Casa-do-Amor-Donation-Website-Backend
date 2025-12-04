@@ -1,65 +1,48 @@
 package com.casadoamor.service;
 
-import java.time.LocalDate;
+import com.casadoamor.dao.AreaAtuacaoDAO;
+import com.casadoamor.dao.VoluntarioDAO;
 import com.casadoamor.enums.StatusInscricao;
 import com.casadoamor.model.AreaAtuacao;
 import com.casadoamor.model.Voluntario;
-import com.casadoamor.dao.VoluntarioDAO;
+
+import java.time.LocalDate;
 import java.util.List;
-import com.casadoamor.dao.AreaAtuacaoDAO;
 
 public class VoluntarioService {
 
-  private VoluntarioDAO voluntarioDAO;
-  private AreaAtuacaoDAO areaAtuacaoDAO;
+    private final VoluntarioDAO voluntarioDAO;
+    private final AreaAtuacaoDAO areaAtuacaoDAO;
 
-  public VoluntarioService(){
-    this.voluntarioDAO = new VoluntarioDAO();
-    this.areaAtuacaoDAO = new AreaAtuacaoDAO();
-  }
-
-  public void registrarInscricao(Voluntario voluntario) throws Exception{
-    //feature 2.1
-
-    //VALIDAÇÕES
-    if (voluntario.getNome() == null || voluntario.getNome().trim().isEmpty()) {
-      throw new Exception("O campo 'Nome' é obrigatório.");
-    }
-    if (voluntario.getEmail() == null || voluntario.getEmail().trim().isEmpty()) {
-      throw new Exception("O campo 'Email' é obrigatório.");
-    }
-    if(voluntario.getCpf() == null || voluntario.getCpf().trim().isEmpty()){
-      throw new Exception("O campo 'CPF' é obrigatório.");
-    }
-    if(voluntario.getTelefone() == null || voluntario.getTelefone().trim().isEmpty()){
-      throw new Exception("O campo 'Telefone' é obrigatório.");
-    }
-    if(voluntario.getDataInscricao() == null){
-      throw new Exception("O campo 'Data Inscrição' é obrigatório.");
+    public VoluntarioService() {
+        this.voluntarioDAO = new VoluntarioDAO();
+        this.areaAtuacaoDAO = new AreaAtuacaoDAO();
     }
 
-    // REGRAS DE NEGÓCIO
-    voluntario.setStatusInscricao(StatusInscricao.PENDENTE_ANALISE); //RN-005
+    public void registrarInscricao(Voluntario voluntario) throws Exception {
+        if (voluntario.getNome() == null || voluntario.getNome().trim().isEmpty()) throw new Exception("Nome obrigatório.");
+        if (voluntario.getEmail() == null || voluntario.getEmail().trim().isEmpty()) throw new Exception("Email obrigatório.");
+        
+        voluntario.setDataInscricao(LocalDate.now());
+        voluntario.setStatusInscricao(StatusInscricao.PENDENTE_ANALISE); // RN-005
 
-    // PERCISTÊNCIA
-    try{
-      voluntarioDAO.salvar(voluntario);
-    } catch (Exception e){
-      throw new Exception("Erro ao salvar inscrição no banco de dados: " + e.getMessage());
+        voluntarioDAO.salvar(voluntario);
     }
+
+    public List<Voluntario> listarInscricoes() {
+        return voluntarioDAO.listar();
     }
 
-  public List<Voluntario> listarInscricoes(){
-    //feature 2.2
-    //VALIDAÇÕES
+    public List<AreaAtuacao> buscarAreasParaDropdown() {
+        return areaAtuacaoDAO.listar();
+    }
 
-    //REGRAS DE NEGÓCIO
-
-    //BUSCAR DADOS 
-    return voluntarioDAO.listar();
-  }
-
-  public List<AreaAtuacao> buscarAreasParaDropdown(){
-    return areaAtuacaoDAO.listar();
-  }
+    // Novo Método: Avaliar Candidato
+    public void avaliarCandidato(Long idUsuario, boolean aprovado) {
+        StatusInscricao novoStatus = aprovado ? StatusInscricao.APROVADA : StatusInscricao.REJEITADA;
+        voluntarioDAO.atualizarStatus(idUsuario, novoStatus);
+        
+        // Opcional: Aqui você poderia enviar um email notificando o voluntário
+        // emailService.enviarNotificacao(idUsuario, novoStatus);
+    }
 }
