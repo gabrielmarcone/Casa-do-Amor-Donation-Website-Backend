@@ -43,4 +43,24 @@ public class VoluntarioController {
       List<AreaAtuacao> areas = voluntarioService.buscarAreasParaDropdown();
       return ResponseEntity.ok(areas);
   }
+
+  @PutMapping("/{id}")
+    public ResponseEntity<String> atualizarVoluntario(@PathVariable Long id, @RequestBody Voluntario voluntario) {
+        try {
+            voluntarioService.atualizarVoluntario(id, voluntario);
+            return ResponseEntity.ok("Voluntário atualizado com sucesso!");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro: " + e.getMessage());
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> excluirVoluntario(@PathVariable Long id) {
+        try {
+            voluntarioService.excluirVoluntario(id);
+            return ResponseEntity.ok("Voluntário excluído com sucesso!");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Erro: " + e.getMessage());
+        }
+    }
 }

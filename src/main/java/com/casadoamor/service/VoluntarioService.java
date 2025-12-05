@@ -62,4 +62,22 @@ public class VoluntarioService {
   public List<AreaAtuacao> buscarAreasParaDropdown(){
     return areaAtuacaoDAO.listar();
   }
+
+  public void atualizarVoluntario(Long id, Voluntario voluntario) throws Exception {
+        // Validações básicas...
+        voluntario.setIdUsuario(id); // Garante que o ID do objeto é o da URL
+        try {
+            voluntarioDAO.atualizar(voluntario);
+        } catch (Exception e) {
+            throw new Exception("Erro ao atualizar: " + e.getMessage());
+        }
+    }
+
+    public void excluirVoluntario(Long id) throws Exception {
+        try {
+            voluntarioDAO.excluir(id);
+        } catch (Exception e) {
+            throw new Exception("Erro ao excluir: " + e.getMessage());
+        }
+    }
 }

@@ -125,4 +125,99 @@ public class VoluntarioDAO implements IVoluntarioDAO {
         }
         return retorno;
     }
+
+    @Override
+    public Voluntario buscarPorId(Long id) {
+        String sql = "SELECT * FROM Voluntario WHERE idUsuario = ?"; // Ou JOIN com Usuario se precisar de todos os campos
+        // Implementação simplificada para checagem de existência
+        // ... (Seu código de busca aqui, similar ao listar mas com WHERE)
+        return null; // Placeholder se não encontrar
+    }
+
+    @Override
+    public void atualizar(Voluntario voluntario) {
+        String sqlUsuario = "UPDATE Usuario SET nome=?, email=?, cpf=?, telefone=? WHERE idUsuario=?";
+        String sqlVoluntario = "UPDATE Voluntario SET dataInscricao=?, statusInscricao=? WHERE id_usuario=?";
+        // Para áreas de atuação, a estratégia mais simples é DELETE seguido de INSERT
+        String deleteAreas = "DELETE FROM voluntario_area_atuacao WHERE id_voluntario=?";
+        String insertAreas = "INSERT INTO voluntario_area_atuacao (id_voluntario, id_area_atuacao, especialidade) VALUES (?, ?, ?)";
+
+        try (Connection conn = ConnectionFactory.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                // 1. Atualiza Usuario
+                try (PreparedStatement ps = conn.prepareStatement(sqlUsuario)) {
+                    ps.setString(1, voluntario.getNome());
+                    ps.setString(2, voluntario.getEmail());
+                    ps.setString(3, voluntario.getCpf());
+                    ps.setString(4, voluntario.getTelefone());
+                    ps.setLong(5, voluntario.getIdUsuario());
+                    ps.executeUpdate();
+                }
+                // 2. Atualiza Voluntario
+                try (PreparedStatement ps = conn.prepareStatement(sqlVoluntario)) {
+                    ps.setDate(1, Date.valueOf(voluntario.getDataInscricao()));
+                    ps.setString(2, voluntario.getStatusInscricao().toString());
+                    ps.setLong(3, voluntario.getIdUsuario());
+                    ps.executeUpdate();
+                }
+                // 3. Atualiza Áreas (Remove antigas e põe novas)
+                try (PreparedStatement ps = conn.prepareStatement(deleteAreas)) {
+                    ps.setLong(1, voluntario.getIdUsuario());
+                    ps.executeUpdate();
+                }
+                if (voluntario.getAreasDeAtuacao() != null) {
+                    try (PreparedStatement ps = conn.prepareStatement(insertAreas)) {
+                        for (VoluntarioAreaAtuacao area : voluntario.getAreasDeAtuacao()) {
+                            ps.setLong(1, voluntario.getIdUsuario());
+                            ps.setLong(2, area.getAreaAtuacao().getIdArea());
+                            ps.setString(3, area.getEspecialidade());
+                            ps.addBatch();
+                        }
+                        ps.executeBatch();
+                    }
+                }
+                conn.commit();
+            } catch (Exception e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao atualizar voluntário", e);
+        }
+    }
+
+    @Override
+    public void excluir(Long idUsuario) {
+        String deleteAreas = "DELETE FROM voluntario_area_atuacao WHERE id_voluntario=?";
+        String deleteVoluntario = "DELETE FROM Voluntario WHERE id_usuario=?";
+        String deleteUsuario = "DELETE FROM Usuario WHERE idUsuario=?"; // Cuidado com integridade referencial
+
+        try (Connection conn = ConnectionFactory.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                // 1. Remove dependências (Áreas)
+                try (PreparedStatement ps = conn.prepareStatement(deleteAreas)) {
+                    ps.setLong(1, idUsuario);
+                    ps.executeUpdate();
+                }
+                // 2. Remove Filho (Voluntario)
+                try (PreparedStatement ps = conn.prepareStatement(deleteVoluntario)) {
+                    ps.setLong(1, idUsuario);
+                    ps.executeUpdate();
+                }
+                // 3. Remove Pai (Usuario)
+                try (PreparedStatement ps = conn.prepareStatement(deleteUsuario)) {
+                    ps.setLong(1, idUsuario);
+                    ps.executeUpdate();
+                }
+                conn.commit();
+            } catch (Exception e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao excluir voluntário", e);
+        }
+    }
 }
