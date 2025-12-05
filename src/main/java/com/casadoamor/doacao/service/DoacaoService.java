@@ -2,6 +2,7 @@ package com.casadoamor.doacao.service;
 
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 import com.casadoamor.doacao.config.MercadoPagoConfigManager;
@@ -201,5 +202,8 @@ public class DoacaoService {
         return StatusDoacao.PENDING;
     }
   }
+
+  public List<Doacao> listarTodas() { return doacaoDAO.listarTodas(); }
+  
 
 }
