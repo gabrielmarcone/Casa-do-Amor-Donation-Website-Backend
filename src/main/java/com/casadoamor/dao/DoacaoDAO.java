@@ -6,6 +6,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.casadoamor.model.Doacao; // Lembre-se que movemos o Model pra cá
 import com.casadoamor.enums.StatusDoacao; // E o Enum pra cá
 import com.casadoamor.util.ConnectionFactory;
@@ -152,4 +155,26 @@ public class DoacaoDAO {
 
         return doacao;
     }
+
+    public List<Doacao> listarTodas() {
+        // Busca doacao + dados do pagamento + nome do doador (caso esteja na tabela doacao)
+        // Se a tabela doacao tiver FK para usuario, faça o JOIN com usuario. 
+        // Como no seu código atual 'nome_doador' é uma coluna texto na tabela doacao, faremos SELECT direto.
+        
+        String sql = "SELECT * FROM doacao ORDER BY criado_em DESC";
+        List<Doacao> lista = new ArrayList<>();
+
+        try (Connection conn = ConnectionFactory.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sql);
+            ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                lista.add(mapearDoacao(rs)); // Reutiliza seu método auxiliar existente
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException("Erro ao listar todas as doações", e);
+        }
+        return lista;
+    }
+
 }

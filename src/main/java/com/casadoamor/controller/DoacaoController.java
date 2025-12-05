@@ -1,6 +1,9 @@
 package com.casadoamor.controller;
 
+import java.util.List;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,7 +16,8 @@ import com.casadoamor.dto.CriarDoacaoRequest;
 import com.casadoamor.dto.CriarDoacaoResponse;
 import com.casadoamor.doacao.service.DoacaoService;
 
-import com.casadoamor.model.Doacao;;
+
+import com.casadoamor.model.Doacao;
 
 
 @RestController
@@ -33,5 +37,12 @@ public class DoacaoController {
   public Doacao buscarDoacao(@PathVariable Long id) {
     return doacaoService.buscarPorId(id);
   }
+
+  @GetMapping("/admin/lista")
+    public ResponseEntity<List<Doacao>> listarTodas() {
+        // Idealmente verificar token de admin aqui
+        List<Doacao> doacoes = doacaoService.listarTodas(); // Você precisará criar esse método "ponte" no Service tbm
+        return ResponseEntity.ok(doacoes);
+    }
 
 }
