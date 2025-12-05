@@ -2,6 +2,7 @@ package com.casadoamor.doacao.service;
 
 import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.List; // Import necessário
 import java.util.UUID;
 
 import com.casadoamor.doacao.config.MercadoPagoConfigManager;
@@ -27,6 +28,12 @@ public class DoacaoService {
   private MercadoPagoClient mercadoPagoClient = new MercadoPagoClient();
   private final ObjectMapper objectMapper = new ObjectMapper();
 
+  // --- NOVO MÉTODO PARA LISTAR TUDO (USADO NO ADMIN) ---
+  public List<Doacao> listarTodas() {
+      return doacaoDAO.listarTodas();
+  }
+  // -----------------------------------------------------
+
   public CriarDoacaoResponse criarDoacao(CriarDoacaoRequest request) {
 
     Doacao doacao = new Doacao();
@@ -47,20 +54,16 @@ public class DoacaoService {
 
     doacaoDAO.salvarDoacao(doacao);
 
-    // CORRECAO: Identificar o tipo de pagamento de forma segura (sem dar erro NullPointer)
     String tipoPagamento = request.getTipoPagamento(); 
-    // Fallback: se tipoPagamento for nulo, tenta pegar do metodoPagamento
     if (tipoPagamento == null) {
         tipoPagamento = request.getMetodoPagamento();
     }
-    // Garante que não é nulo para evitar erros
     if (tipoPagamento == null) {
         tipoPagamento = ""; 
     }
 
     PagamentoResultado resultado = null;
 
-    // Logica blindada: A string fixa vem antes do .equalsIgnoreCase
     if ("PIX".equalsIgnoreCase(tipoPagamento)) {
       resultado = mercadoPagoClient.criarPagamentoPix(doacao, request);
     } 
@@ -71,8 +74,6 @@ public class DoacaoService {
       resultado = mercadoPagoClient.criarPagamentoCartao(doacao, request);
     } 
     else {
-        // Se nao reconhecer o tipo, podemos logar ou lancar erro, 
-        // mas aqui vamos deixar passar para devolver a mensagem de erro no response
         System.out.println("Tipo de pagamento desconhecido: " + tipoPagamento);
     }
 
@@ -202,4 +203,4 @@ public class DoacaoService {
     }
   }
 
-}
+} 

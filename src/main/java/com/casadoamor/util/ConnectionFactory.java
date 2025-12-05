@@ -8,7 +8,7 @@ public class ConnectionFactory {
     // dados de acesso ao banco
     private static final String URL = "jdbc:postgresql://localhost:5432/casadoamor_db";
     private static final String USER = "postgres";
-    private static final String PASSWORD = "1234";
+    private static final String PASSWORD = "admin";
 
     public static Connection getConnection() {
         try {
