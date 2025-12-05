@@ -8,7 +8,7 @@ import org.springframework.web.reactive.function.client.WebClientResponseExcepti
 import com.casadoamor.doacao.config.MercadoPagoConfigManager;
 import com.casadoamor.dto.CriarDoacaoRequest;
 import com.casadoamor.model.Doacao;
-import com.casadoamor.model.Assinatura; // <--- NÃO ESQUEÇA DESTE IMPORT NOVO
+import com.casadoamor.model.Assinatura;
 
 public class MercadoPagoClient {
 
@@ -25,12 +25,7 @@ public class MercadoPagoClient {
 
         String accessToken = prop.getAccessToken();
         if (accessToken == null || accessToken.isBlank()) {
-            // Tenta pegar direto do ambiente caso a classe de config tenha falhado
             accessToken = System.getenv("ACCESS_TOKEN");
-            if (accessToken == null || accessToken.isBlank()) {
-                 // Em dev as vezes deixamos passar, mas o ideal é lançar erro
-                 // throw new IllegalStateException("Access token do Mercado Pago nao configurado");
-            }
         }
         MercadoPagoConfigManager.configuracoes(prop);
 
@@ -40,7 +35,7 @@ public class MercadoPagoClient {
                 .build();
     }
 
-    // --- MÉTODOS DE PAGAMENTO ÚNICO (Já existiam) ---
+    // --- PAGAMENTOS ÚNICOS (PIX / CARTÃO) ---
 
     public PagamentoResultado criarPagamentoPix(Doacao doacao, CriarDoacaoRequest request) {
         String descricao = request.getDescricao() != null ? request.getDescricao() : "Doacao para Casa do Amor";
@@ -62,9 +57,7 @@ public class MercadoPagoClient {
                     .bodyToMono(Map.class)
                     .block();
 
-            if (response == null) {
-                throw new RuntimeException("Resposta vazia do Mercado Pago");
-            }
+            if (response == null) throw new RuntimeException("Resposta vazia do Mercado Pago");
 
             Map<String, Object> pointOfInteraction = (Map<String, Object>) response.get("point_of_interaction");
             Map<String, Object> trans = pointOfInteraction != null
@@ -81,12 +74,9 @@ public class MercadoPagoClient {
                 resultado.setQrCodeImg(asString(trans.get("qr_code_base64")));
             }
             resultado.setMensagem("Pix criado com sucesso");
-
             return resultado;
 
         } catch (WebClientResponseException e) {
-            String erroMsg = e.getResponseBodyAsString();
-            System.err.println("Erro MP Pix: " + erroMsg);
             throw new RuntimeException("Erro ao criar Pix: " + e.getStatusCode());
         }
     }
@@ -96,21 +86,53 @@ public class MercadoPagoClient {
             throw new IllegalArgumentException("Token do cartao obrigatorio");
         }
         
-        // ... (código existente mantido para brevidade, mas deve estar aqui) ...
-        
-        // Se precisar que eu reenvie o bloco do cartao me avise, mas vou focar no metodo que faltava abaixo
-        // Para compilar, vou deixar um retorno null temporário se você não copiou o código anterior,
-        // mas o ideal é manter seu código de cartão aqui.
-        return null; 
+        String descricao = request.getDescricao() != null ? request.getDescricao() : "Doacao para Casa do Amor";
+        Integer parcelas = request.getParcelas() != null ? request.getParcelas() : 1;
+        String documentoTipo = request.getDocumentoTipo() != null ? request.getDocumentoTipo() : "CPF";
+
+        var body = Map.of(
+                "transaction_amount", doacao.getValor(),
+                "description", descricao,
+                "token", request.getTokenCartao(),
+                "installments", parcelas,
+                "payment_method_id", request.getMetodoPagamentoId() != null ? request.getMetodoPagamentoId() : "credit_card",
+                "external_reference", doacao.getReferenciaExt(),
+                "notification_url", "https://seu-dominio.com/notifications",
+                "payer", Map.of(
+                        "email", doacao.getEmailDoador(),
+                        "identification", Map.of(
+                                "type", documentoTipo,
+                                "number", request.getDocumentoNumero())));
+
+        try {
+            Map<String, Object> response = this.webClient.post()
+                    .uri("/v1/payments")
+                    .header("X-Idempotency-Key", doacao.getIdempotencyKey())
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (response == null) throw new RuntimeException("Resposta vazia do Mercado Pago");
+
+            PagamentoResultado resultado = new PagamentoResultado();
+            resultado.setPagamentoId(asString(response.get("id")));
+            resultado.setReferenciaExt(asString(response.get("external_reference")));
+            resultado.setStatus(asString(response.get("status")));
+            resultado.setMensagem("Pagamento cartao processado");
+            return resultado;
+
+        } catch (WebClientResponseException e) {
+            throw new RuntimeException("Erro MP Cartao: " + e.getStatusCode() + " " + e.getResponseBodyAsString());
+        }
     }
 
-    // --- MÉTODOS DE ASSINATURA (O QUE FALTAVA) ---
+    // --- ASSINATURAS (RECORRÊNCIA) ---
 
     public String criarAssinatura(Assinatura assinatura, String emailDoador) {
-        // Monta o corpo da requisição para o endpoint /preapproval (Assinaturas)
         var body = Map.of(
             "reason", "Assinatura Casa do Amor - Mensal",
-            "external_reference", "ASSIN-" + assinatura.getIdUsuarioDoador(), // Referência para sabermos de quem é
+            "external_reference", "ASSIN-" + assinatura.getIdUsuarioDoador(), 
             "payer_email", emailDoador,
             "auto_recurring", Map.of(
                 "frequency", 1,
@@ -118,26 +140,38 @@ public class MercadoPagoClient {
                 "transaction_amount", assinatura.getValorMensal(),
                 "currency_id", "BRL"
             ),
-            "back_url", "https://seusite.com/retorno" // Para onde o usuário volta após assinar
+            "back_url", "https://seusite.com/retorno"
         );
 
         try {
             Map<String, Object> response = this.webClient.post()
-                    .uri("/preapproval") // Endpoint específico de assinaturas
+                    .uri("/preapproval")
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block();
             
             if (response != null) {
-                // O Mercado Pago retorna um "init_point" que é o link para o usuário clicar e autorizar
-                return asString(response.get("init_point")); 
+                return asString(response.get("init_point")); // Link para aprovação
             }
         } catch (WebClientResponseException e) {
-            System.err.println("Erro criar assinatura MP: " + e.getResponseBodyAsString());
             throw new RuntimeException("Erro no Gateway ao criar assinatura: " + e.getStatusCode());
         }
         return null;
+    }
+
+    public void cancelarAssinatura(String idAssinaturaGateway) {
+        var body = Map.of("status", "cancelled");
+        try {
+            this.webClient.put()
+                    .uri("/preapproval/{id}", idAssinaturaGateway)
+                    .bodyValue(body)
+                    .retrieve()
+                    .toBodilessEntity()
+                    .block();
+        } catch (WebClientResponseException e) {
+            throw new RuntimeException("Falha ao cancelar assinatura no gateway: " + e.getStatusCode());
+        }
     }
 
     // --- UTILITÁRIOS ---
@@ -150,9 +184,7 @@ public class MercadoPagoClient {
                     .bodyToMono(Map.class)
                     .block();
 
-            if (response == null) {
-                throw new RuntimeException("Resposta vazia do Mercado Pago");
-            }
+            if (response == null) throw new RuntimeException("Resposta vazia");
 
             PagamentoResultado resultado = new PagamentoResultado();
             resultado.setPagamentoId(asString(response.get("id")));
@@ -160,7 +192,7 @@ public class MercadoPagoClient {
             resultado.setStatus(asString(response.get("status")));
             return resultado;
         } catch (WebClientResponseException e) {
-             throw new RuntimeException("Erro ao consultar: " + e.getStatusCode());
+            throw new RuntimeException("Erro ao consultar: " + e.getStatusCode());
         }
     }
 

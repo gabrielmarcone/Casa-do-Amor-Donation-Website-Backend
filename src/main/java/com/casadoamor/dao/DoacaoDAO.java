@@ -1,16 +1,11 @@
 package com.casadoamor.dao;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Timestamp;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.casadoamor.model.Doacao; // Lembre-se que movemos o Model pra cá
-import com.casadoamor.enums.StatusDoacao; // E o Enum pra cá
+import com.casadoamor.model.Doacao; 
+import com.casadoamor.enums.StatusDoacao; 
 import com.casadoamor.util.ConnectionFactory;
 
 public class DoacaoDAO {
@@ -19,8 +14,9 @@ public class DoacaoDAO {
     }
 
     public void salvarDoacao(Doacao doacao) {
-        String sql = "INSERT INTO doacao (valor, moeda, status_doacao, referencia_ext, idempotency_key, nome_doador, email_doador, criado_em, atualizado_em) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        // ATUALIZADO: Adicionadas as colunas 'id_assinatura' e 'pagamento_id'
+        String sql = "INSERT INTO doacao (valor, moeda, status_doacao, referencia_ext, idempotency_key, nome_doador, email_doador, criado_em, atualizado_em, id_assinatura, pagamento_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = ConnectionFactory.getConnection();
              // O flag RETURN_GENERATED_KEYS é essencial para pegar o ID criado pelo banco
@@ -37,6 +33,16 @@ public class DoacaoDAO {
             // Conversão de LocalDateTime para Timestamp do SQL
             ps.setTimestamp(8, Timestamp.valueOf(doacao.getCriadoEm())); 
             ps.setTimestamp(9, Timestamp.valueOf(doacao.getAtualizadoEm()));
+
+            // --- NOVO: Tratamento para campo id_assinatura (pode ser NULL) ---
+            if (doacao.getIdAssinatura() != null) {
+                ps.setLong(10, doacao.getIdAssinatura());
+            } else {
+                ps.setNull(10, Types.BIGINT);
+            }
+
+            // --- NOVO: Salva o ID do pagamento vinculado ---
+            ps.setString(11, doacao.getPagamentoId());
 
             int affectedRows = ps.executeUpdate();
 
@@ -141,7 +147,7 @@ public class DoacaoDAO {
         }
 
         doacao.setReferenciaExt(rs.getString("referencia_ext"));
-        doacao.setPagamentoId(rs.getString("pagamento_id"));
+        doacao.setPagamentoId(rs.getString("pagamento_id")); // Agora lê corretamente do banco
         doacao.setIdempotencyKey(rs.getString("idempotency_key"));
         doacao.setNomeDoador(rs.getString("nome_doador"));
         doacao.setEmailDoador(rs.getString("email_doador"));
@@ -153,14 +159,17 @@ public class DoacaoDAO {
         Timestamp atualizadoEm = rs.getTimestamp("atualizado_em");
         if (atualizadoEm != null) doacao.setAtualizadoEm(atualizadoEm.toLocalDateTime());
 
+        // --- NOVO: Lê o ID da Assinatura ---
+        long idAssinatura = rs.getLong("id_assinatura");
+        // Verifica se a última coluna lida era NULL (pois 0 pode ser um valor válido para long primitivo, mas aqui indica null)
+        if (!rs.wasNull()) {
+            doacao.setIdAssinatura(idAssinatura);
+        }
+
         return doacao;
     }
 
     public List<Doacao> listarTodas() {
-        // Busca doacao + dados do pagamento + nome do doador (caso esteja na tabela doacao)
-        // Se a tabela doacao tiver FK para usuario, faça o JOIN com usuario. 
-        // Como no seu código atual 'nome_doador' é uma coluna texto na tabela doacao, faremos SELECT direto.
-        
         String sql = "SELECT * FROM doacao ORDER BY criado_em DESC";
         List<Doacao> lista = new ArrayList<>();
 
@@ -176,5 +185,4 @@ public class DoacaoDAO {
         }
         return lista;
     }
-
 }

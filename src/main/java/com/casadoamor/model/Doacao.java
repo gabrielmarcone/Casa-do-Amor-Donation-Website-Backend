@@ -24,6 +24,8 @@ public class Doacao {
   private LocalDateTime criadoEm;
   private LocalDateTime atualizadoEm;
 
+  private Long idAssinatura;
+
   public Doacao() {
   }
 
@@ -115,4 +117,12 @@ public class Doacao {
     this.atualizadoEm = atualizadoEm;
   }
 
+  public Long getIdAssinatura() {
+        return idAssinatura;
+    }
+
+  public void setIdAssinatura(Long idAssinatura) {
+        this.idAssinatura = idAssinatura;
+  }
+  
 }
