@@ -19,6 +19,7 @@ public class CriarDoacaoRequest {
   private String tipoPagamento; // credit_card ou debit_card
   private String documentoTipo; // ex: CPF
   private String documentoNumero; // ex: 12345678909
+  private String telefone;
 
   public CriarDoacaoRequest() {
   }
@@ -111,4 +112,11 @@ public class CriarDoacaoRequest {
     this.documentoNumero = documentoNumero;
   }
 
+  public String getTelefone() {
+    return telefone;
+  }
+
+  public void setTelefone() {
+    this.telefone = telefone;
+  }
 }

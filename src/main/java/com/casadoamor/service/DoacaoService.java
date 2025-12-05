@@ -48,7 +48,6 @@ public class DoacaoService {
         pagamento.setStatusPagamento(StatusPagamento.PENDENTE);
 
         try {
-            // Tenta converter o enum, se falhar assume PIX
             pagamento.setMetodoPagamento(MetodoPagamento.valueOf(request.getMetodoPagamento().toUpperCase()));
         } catch (Exception e) {
             pagamento.setMetodoPagamento(MetodoPagamento.PIX);
@@ -69,7 +68,7 @@ public class DoacaoService {
         doacao.setReferenciaExt(UUID.randomUUID().toString());
         doacao.setIdempotencyKey(UUID.randomUUID().toString());
 
-        // VINCULA O PAGAMENTO (Salva o ID do pagamento local na doação)
+        // VINCULA O PAGAMENTO
         doacao.setPagamentoId(String.valueOf(pagamento.getIdPagamento()));
 
         doacaoDAO.salvarDoacao(doacao);
@@ -79,17 +78,16 @@ public class DoacaoService {
         if (pagamento.getMetodoPagamento() == MetodoPagamento.PIX) {
             resultado = mercadoPagoClient.criarPagamentoPix(doacao, request);
         } else {
-            // Assumindo cartão para qualquer outro método
+            // Assumindo cartão
             resultado = mercadoPagoClient.criarPagamentoCartao(doacao, request);
         }
 
         // 4. Atualizar o Pagamento com o ID do Gateway
         if (resultado != null) {
-            // Atualiza a tabela PAGAMENTO com o ID que veio do Mercado Pago (ex: "123456789")
             pagamentoDAO.atualizarStatus(pagamento.getIdPagamento(), StatusPagamento.PENDENTE, resultado.getPagamentoId());
         }
 
-        // 5. Montar Resposta para o Front
+        // 5. Montar Resposta
         CriarDoacaoResponse response = new CriarDoacaoResponse();
         response.setId(doacao.getId());
         response.setStatus(doacao.getStatusDoacao().name());
@@ -111,10 +109,9 @@ public class DoacaoService {
         return doacaoDAO.buscarPorId(id);
     }
 
-    // --- WEBHOOK: PROCESSAMENTO DE RETORNO DO MP (LÓGICA CRÍTICA) ---
+    // --- WEBHOOK: PROCESSAMENTO DE RETORNO DO MP ---
     public void processarWebhook(String payload, String signature, String requestId) {
         try {
-            // 1. Extrair ID do pagamento da notificação JSON
             JsonNode root = objectMapper.readTree(payload);
             JsonNode data = root.path("data");
 
@@ -123,7 +120,6 @@ public class DoacaoService {
                 idPagamentoMP = data.path("id").asLong(0L);
             }
             if (idPagamentoMP == null || idPagamentoMP == 0) {
-                // Tenta pegar da raiz se não estiver dentro de data
                 idPagamentoMP = root.path("data.id").asLong(0L);
             }
 
@@ -132,11 +128,7 @@ public class DoacaoService {
                 return;
             }
 
-            // 2. Validar assinatura de segurança (HMAC) - Opcional para dev, recomendado prod
-            String secret = MercadoPagoConfigManager.getPropriedades().getWebhook();
-            // A validação completa do HMAC depende da versão da API, mantemos simplificado aqui.
-
-            // 3. Consultar a API do Mercado Pago para ver o status REAL
+            // Consultar a API do Mercado Pago para ver o status REAL
             PagamentoResultado resultadoMP = mercadoPagoClient.consultarPagamento(idPagamentoMP.toString());
 
             if (resultadoMP == null) {
@@ -144,19 +136,19 @@ public class DoacaoService {
                 return;
             }
 
-            // 4. Buscar a Doação no nosso banco pela Referência Externa
+            // Buscar a Doação no nosso banco pela Referência Externa
             Doacao doacao = doacaoDAO.buscaPorRefEx(resultadoMP.getReferenciaExt());
 
             // --- TRATAMENTO DE RECORRÊNCIA (ASSINATURA) ---
             if (doacao == null) {
                 String ref = resultadoMP.getReferenciaExt();
+                // Verifica se é uma referência de assinatura (Ex: "ASSIN-55")
                 if (ref != null && ref.startsWith("ASSIN-")) {
                     System.out.println("Recorrência detectada! Criando nova doação para: " + ref);
 
                     // A. Criar novo Pagamento no Banco
                     Pagamento novoPagamento = new Pagamento();
-                    // Assumimos que a recorrência é aprovada/paga se caiu aqui com status approved
-                    novoPagamento.setValor(BigDecimal.ZERO); // Idealmente buscar valor da transação no JSON do MP
+                    novoPagamento.setValor(BigDecimal.ZERO); // Idealmente pegaria o valor do JSON do MP
                     novoPagamento.setMetodoPagamento(MetodoPagamento.CARTAO_CREDITO);
                     novoPagamento.setDataPagamento(LocalDateTime.now());
                     novoPagamento.setStatusPagamento(mapearStatusPagamento(resultadoMP.getStatus()));
@@ -172,13 +164,20 @@ public class DoacaoService {
                     doacao.setCriadoEm(LocalDateTime.now());
                     doacao.setAtualizadoEm(LocalDateTime.now());
                     doacao.setReferenciaExt(ref);
-                    // Vincula o pagamento recém criado
                     doacao.setPagamentoId(String.valueOf(novoPagamento.getIdPagamento())); 
                     
-                    // (Opcional) Extrair ID do Usuario da referência "ASSIN-{idUsuario}" para vincular
+                    // Tenta extrair o ID do usuário da string "ASSIN-{id}"
+                    try {
+                        String idStr = ref.replace("ASSIN-", "");
+                        Long idUsuario = Long.parseLong(idStr);
+                        // Aqui poderíamos buscar o id_assinatura desse usuário, mas 
+                        // salvaremos a doação vinculada ao usuário indiretamente pela ref.
+                        // Se quiser vincular direto na coluna id_assinatura, precisaria buscar a assinatura ativa do usuário.
+                    } catch(Exception e) {
+                        System.out.println("Não foi possível extrair ID de usuário da ref: " + ref);
+                    }
                     
                     doacaoDAO.salvarDoacao(doacao);
-                    System.out.println("Nova doação recorrente salva com ID: " + doacao.getId());
                 } else {
                     System.out.println("Doação não encontrada e ref desconhecida: " + ref);
                     return;
@@ -206,15 +205,6 @@ public class DoacaoService {
             e.printStackTrace();
             System.out.println("Erro crítico ao processar webhook: " + e.getMessage());
         }
-    }
-
-    // --- MÉTODOS AUXILIARES ---
-
-    private String hmacSha256(String data, String secret) throws Exception {
-        Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
-        SecretKeySpec secret_key = new SecretKeySpec(secret.getBytes("UTF-8"), "HmacSHA256");
-        sha256_HMAC.init(secret_key);
-        return Base64.getEncoder().encodeToString(sha256_HMAC.doFinal(data.getBytes("UTF-8")));
     }
 
     private StatusDoacao mapearStatus(String statusGateway) {
