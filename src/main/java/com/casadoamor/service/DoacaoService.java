@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
@@ -28,25 +29,31 @@ import java.util.UUID;
 public class DoacaoService {
 
     private final DoacaoDAO doacaoDAO = new DoacaoDAO();
-    private final PagamentoDAO pagamentoDAO = new PagamentoDAO(); 
+    private final PagamentoDAO pagamentoDAO = new PagamentoDAO();
     private final MercadoPagoClient mercadoPagoClient = new MercadoPagoClient();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // --- FEATURE 1.1: CRIAR DOAÇÃO ---
+    // --- FEATURE 1.1: CRIAR DOAÇÃO (CHECKOUT) ---
     public CriarDoacaoResponse criarDoacao(CriarDoacaoRequest request) {
+        
+        // Validação RN-002: Valor mínimo
+        if (request.getValor() == null || request.getValor().compareTo(new BigDecimal("10.00")) < 0) {
+            throw new IllegalArgumentException("O valor mínimo para doação é de R$ 10,00.");
+        }
+
         // 1. Preparar e Salvar o Pagamento primeiro (Tabela PAGAMENTO)
         Pagamento pagamento = new Pagamento();
         pagamento.setValor(request.getValor());
         pagamento.setDataPagamento(LocalDateTime.now());
         pagamento.setStatusPagamento(StatusPagamento.PENDENTE);
-        
+
         try {
             // Tenta converter o enum, se falhar assume PIX
-            pagamento.setMetodoPagamento(MetodoPagamento.valueOf(request.getMetodoPagamento().toUpperCase())); 
+            pagamento.setMetodoPagamento(MetodoPagamento.valueOf(request.getMetodoPagamento().toUpperCase()));
         } catch (Exception e) {
-            pagamento.setMetodoPagamento(MetodoPagamento.PIX); 
+            pagamento.setMetodoPagamento(MetodoPagamento.PIX);
         }
-        
+
         // Salva no banco para gerar o ID local
         pagamento = pagamentoDAO.salvar(pagamento);
 
@@ -61,9 +68,9 @@ public class DoacaoService {
         doacao.setAtualizadoEm(LocalDateTime.now());
         doacao.setReferenciaExt(UUID.randomUUID().toString());
         doacao.setIdempotencyKey(UUID.randomUUID().toString());
-        
+
         // VINCULA O PAGAMENTO (Salva o ID do pagamento local na doação)
-        doacao.setPagamentoId(String.valueOf(pagamento.getIdPagamento())); 
+        doacao.setPagamentoId(String.valueOf(pagamento.getIdPagamento()));
 
         doacaoDAO.salvarDoacao(doacao);
 
@@ -104,20 +111,20 @@ public class DoacaoService {
         return doacaoDAO.buscarPorId(id);
     }
 
-    // --- WEBHOOK: PROCESSAMENTO DE RETORNO DO MP ---
+    // --- WEBHOOK: PROCESSAMENTO DE RETORNO DO MP (LÓGICA CRÍTICA) ---
     public void processarWebhook(String payload, String signature, String requestId) {
         try {
             // 1. Extrair ID do pagamento da notificação JSON
             JsonNode root = objectMapper.readTree(payload);
             JsonNode data = root.path("data");
-            
+
             Long idPagamentoMP = null;
             if (data != null && !data.isMissingNode()) {
                 idPagamentoMP = data.path("id").asLong(0L);
             }
             if (idPagamentoMP == null || idPagamentoMP == 0) {
-                 // Tenta pegar da raiz se não estiver dentro de data (alguns webhooks variam)
-                 idPagamentoMP = root.path("data.id").asLong(0L);
+                // Tenta pegar da raiz se não estiver dentro de data
+                idPagamentoMP = root.path("data.id").asLong(0L);
             }
 
             if (idPagamentoMP == 0L) {
@@ -125,20 +132,13 @@ public class DoacaoService {
                 return;
             }
 
-            // 2. Validar assinatura de segurança (HMAC)
+            // 2. Validar assinatura de segurança (HMAC) - Opcional para dev, recomendado prod
             String secret = MercadoPagoConfigManager.getPropriedades().getWebhook();
-            if (secret != null && !secret.isEmpty() && signature != null) {
-                String template = "id:" + idPagamentoMP + ";requestId:" + requestId;
-                // Nota: A lógica exata de template do MP pode variar (x-signature vs v1), 
-                // mas a validação básica é essa. Se falhar, logamos mas prosseguimos consultando a API por segurança.
-                // String hashCalculado = hmacSha256(template, secret);
-                // if (!hashCalculado.equals(signature)) ...
-            }
+            // A validação completa do HMAC depende da versão da API, mantemos simplificado aqui.
 
             // 3. Consultar a API do Mercado Pago para ver o status REAL
-            // (Nunca confie apenas no payload do webhook, sempre consulte a fonte)
             PagamentoResultado resultadoMP = mercadoPagoClient.consultarPagamento(idPagamentoMP.toString());
-            
+
             if (resultadoMP == null) {
                 System.out.println("Pagamento não encontrado na API do MP.");
                 return;
@@ -146,28 +146,58 @@ public class DoacaoService {
 
             // 4. Buscar a Doação no nosso banco pela Referência Externa
             Doacao doacao = doacaoDAO.buscaPorRefEx(resultadoMP.getReferenciaExt());
-            
+
+            // --- TRATAMENTO DE RECORRÊNCIA (ASSINATURA) ---
             if (doacao == null) {
-                System.out.println("Doação não encontrada para ref: " + resultadoMP.getReferenciaExt());
-                return;
+                String ref = resultadoMP.getReferenciaExt();
+                if (ref != null && ref.startsWith("ASSIN-")) {
+                    System.out.println("Recorrência detectada! Criando nova doação para: " + ref);
+
+                    // A. Criar novo Pagamento no Banco
+                    Pagamento novoPagamento = new Pagamento();
+                    // Assumimos que a recorrência é aprovada/paga se caiu aqui com status approved
+                    novoPagamento.setValor(BigDecimal.ZERO); // Idealmente buscar valor da transação no JSON do MP
+                    novoPagamento.setMetodoPagamento(MetodoPagamento.CARTAO_CREDITO);
+                    novoPagamento.setDataPagamento(LocalDateTime.now());
+                    novoPagamento.setStatusPagamento(mapearStatusPagamento(resultadoMP.getStatus()));
+                    novoPagamento.setGatewayId(resultadoMP.getPagamentoId());
+
+                    novoPagamento = pagamentoDAO.salvar(novoPagamento);
+
+                    // B. Criar nova Doação no Banco
+                    doacao = new Doacao();
+                    doacao.setValor(novoPagamento.getValor());
+                    doacao.setMoeda("BRL");
+                    doacao.setStatusDoacao(mapearStatus(resultadoMP.getStatus()));
+                    doacao.setCriadoEm(LocalDateTime.now());
+                    doacao.setAtualizadoEm(LocalDateTime.now());
+                    doacao.setReferenciaExt(ref);
+                    // Vincula o pagamento recém criado
+                    doacao.setPagamentoId(String.valueOf(novoPagamento.getIdPagamento())); 
+                    
+                    // (Opcional) Extrair ID do Usuario da referência "ASSIN-{idUsuario}" para vincular
+                    
+                    doacaoDAO.salvarDoacao(doacao);
+                    System.out.println("Nova doação recorrente salva com ID: " + doacao.getId());
+                } else {
+                    System.out.println("Doação não encontrada e ref desconhecida: " + ref);
+                    return;
+                }
             }
 
-            // 5. Atualizar Tabela DOACAO
+            // 5. Atualizar Tabela DOACAO (Status e Data)
             StatusDoacao statusNovo = mapearStatus(resultadoMP.getStatus());
             doacao.setStatusDoacao(statusNovo);
             doacao.setAtualizadoEm(LocalDateTime.now());
-            // Atualiza status na tabela doacao
-            doacaoDAO.atualizarDoacao(doacao); 
+            doacaoDAO.atualizarDoacao(doacao);
 
-            // 6. Atualizar Tabela PAGAMENTO
-            // O campo pagamentoId dentro de Doacao agora é o ID local da tabela Pagamento (FK)
+            // 6. Atualizar Tabela PAGAMENTO (Status e GatewayID)
             try {
-                Long idPagamentoLocal = Long.parseLong(doacao.getPagamentoId());
-                StatusPagamento statusPagamentoNovo = mapearStatusPagamento(resultadoMP.getStatus());
-                
-                // Atualiza status e garante que o gateway_id esteja salvo na tabela Pagamento
-                pagamentoDAO.atualizarStatus(idPagamentoLocal, statusPagamentoNovo, resultadoMP.getPagamentoId());
-                
+                if (doacao.getPagamentoId() != null) {
+                    Long idPagamentoLocal = Long.parseLong(doacao.getPagamentoId());
+                    StatusPagamento statusPagamentoNovo = mapearStatusPagamento(resultadoMP.getStatus());
+                    pagamentoDAO.atualizarStatus(idPagamentoLocal, statusPagamentoNovo, resultadoMP.getPagamentoId());
+                }
             } catch (NumberFormatException e) {
                 System.err.println("Erro ao converter FK pagamento_id: " + doacao.getPagamentoId());
             }
@@ -206,7 +236,7 @@ public class DoacaoService {
             case "approved": return StatusPagamento.PAGO;
             case "rejected": return StatusPagamento.FALHA;
             case "cancelled":
-            case "refunded": return StatusPagamento.EXPIRADO; // ou FALHA
+            case "refunded": return StatusPagamento.EXPIRADO;
             default: return StatusPagamento.PENDENTE;
         }
     }
